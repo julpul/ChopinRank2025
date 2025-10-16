@@ -1,5 +1,7 @@
 import os
+from operator import index
 from pathlib import Path
+import pandas as pd
 
 from yt_dlp import YoutubeDL
 import re
@@ -18,7 +20,7 @@ XVIII_Competition_Third_stage = "https://www.youtube.com/playlist?list=PLTmn2qD3
 
 
 
-def extact_metadata(url):
+def extact_metadata_from_recital(url):
     pianistMap = {}
     with YoutubeDL() as ydl:
         info = ydl.extract_info(url, download=False)
@@ -53,11 +55,11 @@ def extact_metadata(url):
     return pianistMap
 
 
-
-
 def sanitize(name: str) -> str:
     # wytnij znaki niedozwolone i nadmiarowe spacje
     return re.sub(FORBIDDEN, "_", name).strip()
+
+
 def cut_recital_by_pieces(base_path, path_recital, metadata):
     base = Path(base_path)
     pieces_dir = base / "pieces"
@@ -91,8 +93,8 @@ def cut_recital_by_pieces(base_path, path_recital, metadata):
         "+-download recital " + f"{metadata['name']}-{metadata['date']}-{metadata['competition']}-{metadata['stage']}\n")
 
 def download_wav(url):
-    metadata = extact_metadata(url)
-    folder_path = os.path.join("Data",'raw', metadata['competition'], metadata['stage'], metadata['name'])
+    metadata = extact_metadata_from_recital(url)
+    folder_path = os.path.join("../Data", 'raw', metadata['competition'], metadata['stage'], metadata['name'])
     Path(folder_path).mkdir(parents=True, exist_ok=True)
 
     ydl_opts = {
@@ -137,4 +139,37 @@ def process_playlist_individually(playlist_url):
             json.dump(error_logs, f, ensure_ascii=False, indent=2)
 
 
-process_playlist_individually(XVIII_Competition_Firs_tstage)
+def separate_resoults():
+    results = []
+
+    for dirpath,_,filenames in os.walk("..\Data\\resoults"):
+        round = dirpath.split("\\")[-1]
+        competition = dirpath.split("\\")[-2]
+        for filename in filenames:
+            if filename.endswith(".csv"):
+                filepath = os.path.join(dirpath, filename)
+                file_csv = pd.read_csv(filepath)
+
+                map_resoult = {}
+                map_resoult["competition"] = competition
+                map_resoult["stage"] = round
+                qualified = []
+
+                for pianist,country in file_csv[["Pianist","country"]].itertuples(index=False, name=None):
+                    qualified.append({"pianist":pianist,"country":country})
+
+
+
+                map_resoult["qualified"] =qualified
+                results.append(map_resoult)
+    return results
+
+
+def main():
+    resoults = separate_resoults()
+    print(resoults)
+    process_playlist_individually(XVIII_Competition_Firs_tstage)
+
+
+if __name__ == '__main__':
+    main()
