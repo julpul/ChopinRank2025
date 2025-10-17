@@ -168,7 +168,7 @@ def separate_resoults():
 def main():
     resoults = separate_resoults()
     print(resoults)
-    process_playlist_individually(XVIII_Competition_Firs_tstage)
+    #process_playlist_individually(XVIII_Competition_Firs_tstage)
 
 
 if __name__ == '__main__':
