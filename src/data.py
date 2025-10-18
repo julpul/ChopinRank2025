@@ -1,23 +1,49 @@
-import os
-from operator import index
 from pathlib import Path
+import os
 import pandas as pd
 
 from yt_dlp import YoutubeDL
-import re
+
 from pydub import AudioSegment
 import json
+import unicodedata
+import re
 
 
 
 
 FORBIDDEN = r'[\\/:*?"<>|]'
 
-XVIII_Competition_Firs_tstage = "https://www.youtube.com/playlist?list=PLTmn2qD3aSQu5qSHkFIezKnkCMWekntk3"
+XVIII_Competition_Firs_stage = "https://www.youtube.com/playlist?list=PLTmn2qD3aSQu5qSHkFIezKnkCMWekntk3"
 XVIII_Competition_Second_stage = "https://www.youtube.com/playlist?list=PLTmn2qD3aSQtUl-oPRcgm3kGiGjWkLJzN"
 XVIII_Competition_Third_stage = "https://www.youtube.com/playlist?list=PLTmn2qD3aSQtn2fE4OC_LTx6podD7JYXU"
+RESULTS = {}
 
 
+def norm_key(s: str) -> str:
+    if s is None:
+        return ""
+    s = s.strip()
+    s_basic = s.casefold()
+    return s_basic
+
+def norm_key_no_diacritics(s: str) -> str:
+    if s is None:
+        return ""
+    s = s.strip().casefold()
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    s = re.sub(r"\s+", " ", s)
+    return s
+
+
+def get_qualified_stage(stage):
+    if "first round" == stage:
+        return "second round"
+    elif "second round" == stage:
+        return "third round"
+    elif "third round" == stage:
+        return "final"
 
 
 def extact_metadata_from_recital(url):
@@ -43,6 +69,18 @@ def extact_metadata_from_recital(url):
         pianistMap['nationality'] = nationality
         pianistMap['piano'] = re.search(r"piano:\s*(.+)", info['description']).group(1).strip()
         pianistMap['url'] = url
+
+        next_stage = get_qualified_stage(stage)
+        lista = RESULTS[competition][next_stage]['qualified']
+
+        index_by_pianist = {norm_key(q["pianist"]): q for q in lista}
+
+
+        if norm_key(name) in index_by_pianist:
+            pianistMap["qualified"] = True
+        else:
+            pianistMap["qualified"] = False
+
 
         if "chapters" in info:
             pieces = []
@@ -140,35 +178,40 @@ def process_playlist_individually(playlist_url):
 
 
 def separate_resoults():
-    results = []
+    results = {}
 
-    for dirpath,_,filenames in os.walk("..\Data\\resoults"):
-        round = dirpath.split("\\")[-1]
+    for dirpath, _, filenames in os.walk("..\\Data\\resoults"):
+        stage = dirpath.split("\\")[-1]
         competition = dirpath.split("\\")[-2]
+
         for filename in filenames:
             if filename.endswith(".csv"):
                 filepath = os.path.join(dirpath, filename)
                 file_csv = pd.read_csv(filepath)
 
-                map_resoult = {}
-                map_resoult["competition"] = competition
-                map_resoult["stage"] = round
-                qualified = []
+                qualified = [
+                    {"pianist": pianist, "country": country}
+                    for pianist, country in file_csv[["Pianist", "country"]].itertuples(index=False, name=None)
+                ]
 
-                for pianist,country in file_csv[["Pianist","country"]].itertuples(index=False, name=None):
-                    qualified.append({"pianist":pianist,"country":country})
+                # zagnieżdżony słownik
+                results.setdefault(competition, {})[stage] = {"qualified": qualified}
 
-
-
-                map_resoult["qualified"] =qualified
-                results.append(map_resoult)
     return results
 
+def test(resoults):
+    lista = resoults['19th Chopin Competition']['first round']['qualified']
+    index_by_pianist = {q["pianist"]: q for q in lista}
+
+    name = "Piotr Alexewicz"
+    if name in index_by_pianist:
+        print(index_by_pianist[name])
 
 def main():
-    resoults = separate_resoults()
-    print(resoults)
-    #process_playlist_individually(XVIII_Competition_Firs_tstage)
+    global RESULTS;
+    RESULTS = separate_resoults()
+    #print(RESULTS)
+    process_playlist_individually(XVIII_Competition_Firs_stage)
 
 
 if __name__ == '__main__':
